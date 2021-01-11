@@ -1,0 +1,89 @@
+#!/bin/rc
+
+fn confignet{
+	# get primary default interface if not specified
+	if(~ $#* 0){
+		e=/net/ether*
+		if(! ~ $e '/net/ether*')
+			*=(ether $e(1))
+	}
+
+	# setup wifi encryption if any
+	if(~ $1 ether && test -x /bin/aux/wpa){
+		essid=`{grep '^essid: ' $2/ifstats >[2]/dev/null | sed 's/^essid: //; q'}
+		if(! ~ $#essid 0){
+			if(! ~ $#wpapsk 0 || grep -s '^status: need authentication' $2/ifstats >[2]/dev/null){
+				x=(aux/wpa -s $"essid)
+				if(! ~ $#wpapsk 0){
+					echo 'key proto=wpapsk' `{!password=$"wpapsk whatis essid !password} > /mnt/factotum/ctl
+					wpapsk=()
+				}
+				if not {
+					x=($x -p)		
+				}
+				$x $2
+			}
+			essid=()
+		}
+		rm -f /env/^(essid wpapsk)
+	}
+
+	if(~ $1 ether gbe && ~ $#* 2) @{
+		ip/ipconfig -6 $*
+		test -e /env/nora6 || ip/ipconfig $* ra6 recvra 1 &
+		ip/ipconfig -p $* &
+		wait
+	}
+	if not {
+		ip/ipconfig -p $*
+	}
+
+	if(~ $#fs 0)
+		fs=`{awk -F'=' '/^[ 	]*fs=/{print $2}' /net/ndb}
+	if(~ $#auth 0)
+		auth=`{awk -F'=' '/^[ 	]*auth=/{print $2}' /net/ndb}
+	if(~ $#fs 0)
+		ask fs ' address is? ' $auth(1)
+	if(~ $#auth 0)
+		ask auth ' address is? ' $fs(1)
+
+	# resolve dns names
+	if(test -x /bin/ndb/dnsgetip){
+		for(i in fs auth secstore){
+			x=`{for(x in $$i) ndb/dnsgetip -a $x}
+			~ $#x 0 || $i=$x
+		}
+	}
+
+	# publish info in /net/ndb for factotum
+	>> /net/ndb {
+		echo
+		echo 'ipbootinfo='
+		for(i in $fs)	echo '	fs='^$i
+		for(i in $auth)	echo '	auth='^$i
+	} 
+}
+
+fn connecttcp{
+	while(! ~ $#fs 0 && ! srv -q tcp!$fs(1)^!564 boot)
+		fs=$fs(2-);
+	fs=$fs(1)
+}
+
+fn connecttls{
+	while(! ~ $#fs 0 && ! srvtls -q tcp!$fs(1)^!17020 boot)
+		fs=$fs(2-);
+	fs=$fs(1)
+}
+
+fn connectil{
+	while(! ~ $#fs 0 && ! srv -q il!$fs(1)^!17008 boot)
+		fs=$fs(2-);
+	fs=$fs(1)
+}
+
+mtcp=(confignet connecttcp)
+mtls=(confignet connecttls)
+mil=(confignet connectil)
+
+mt=(mtcp mtls mil $mt)

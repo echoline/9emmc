@@ -1,0 +1,125 @@
+CONF=pi3
+CONFLIST=pi3 pi4
+
+loadaddr=0xffffffffc0080000
+
+objtype=arm64
+</$objtype/mkfile
+p=9
+
+DEVS=`{rc ../port/mkdevlist $CONF}
+
+PORT=\
+	alarm.$O\
+	alloc.$O\
+	allocb.$O\
+	auth.$O\
+	cache.$O\
+	chan.$O\
+	dev.$O\
+	edf.$O\
+	fault.$O\
+	mul64fract.$O\
+	page.$O\
+	parse.$O\
+	pgrp.$O\
+	portclock.$O\
+	print.$O\
+	proc.$O\
+	qio.$O\
+	qlock.$O\
+	rdb.$O\
+	rebootcmd.$O\
+	segment.$O\
+	syscallfmt.$O\
+	sysfile.$O\
+	sysproc.$O\
+	taslock.$O\
+	tod.$O\
+	xalloc.$O\
+	userinit.$O\
+
+OBJ=\
+	l.$O\
+	cache.v8.$O\
+	bootargs.$O\
+	clock.$O\
+	fpu.$O\
+	main.$O\
+	mmu.$O\
+	sysreg.$O\
+	random.$O\
+	trap.$O\
+	$CONF.root.$O\
+	$CONF.rootc.$O\
+	$DEVS\
+	$PORT\
+
+# HFILES=
+
+LIB=\
+	/$objtype/lib/libmemlayer.a\
+	/$objtype/lib/libmemdraw.a\
+	/$objtype/lib/libdraw.a\
+	/$objtype/lib/libip.a\
+	/$objtype/lib/libsec.a\
+	/$objtype/lib/libmp.a\
+	/$objtype/lib/libc.a\
+	/$objtype/lib/libdtracy.a\
+
+9:V: $p$CONF s$p$CONF
+
+$p$CONF:DQ:	$OBJ $CONF.$O $LIB
+	echo '# linking raw kernel'	# H6: no headers, data segment aligned
+	$LD -s -l -o $target -H6 -R0x10000 -T$loadaddr $prereq
+
+s$p$CONF:DQ:	$OBJ $CONF.$O $LIB
+	echo '# linking kernel with symbols'
+	$LD -l -o $target -R0x10000 -T$loadaddr $prereq
+	size $target
+
+$p$CONF.gz:D:	$p$CONF
+	gzip -9 <$p$CONF >$target
+
+$OBJ: $HFILES
+
+install:V: /$objtype/$p$CONF
+
+/$objtype/$p$CONF:D: $p$CONF s$p$CONF
+	cp -x $p$CONF s$p$CONF /$objtype/
+
+
+REPCC=`{../port/mkfilelist ../bcm}
+^($REPCC)\.$O:R:	'../bcm/\1.c'
+	$CC $CFLAGS -I. -. ../bcm/$stem1.c
+
+<../boot/bootmkfile
+<../port/portmkfile
+<|../port/mkbootrules $CONF
+
+arch.$O clock.$O fpiarm.$O main.$O mmu.$O screen.$O syscall.$O trap.$O: \
+	/$objtype/include/ureg.h
+trap.$O main.$O: /sys/include/tos.h
+l.$O cache.v8.$O mmu.$O rebootcode.$O: mem.h
+l.$O cache.v8.$O archbcm3.$O clock.$O fpu.$O trap.$O mmu.$O rebootcode.$O: sysreg.h
+main.$O: rebootcode.i
+pcibcm.$O: ../port/pci.h
+
+devmouse.$O mouse.$O screen.$O: screen.h
+usbdwc.$O: dwcotg.h ../port/usb.h
+
+io.h:	../bcm/io.h
+	touch $target
+screen.h:D: ../bcm/screen.h
+	echo '#include "../bcm/screen.h"' > screen.h
+dwcotg.h:D: ../bcm/dwcotg.h
+	echo '#include "../bcm/dwcotg.h"' > dwcotg.h
+
+initcode.out:		init9.$O initcode.$O /$objtype/lib/libc.a
+	$LD -l -R1 -s -o $target $prereq
+
+rebootcode.out:		rebootcode.$O cache.v8.$O
+	$LD -l -H6 -R1 -T0x1c00 -s -o $target $prereq
+
+$CONF.clean:
+	rm -rf $p$CONF s$p$CONF errstr.h screen.h dwcotg.h $CONF.c boot$CONF.c
