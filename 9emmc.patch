@@ -1,0 +1,219 @@
+diff -ur a/bcm/emmc.c b/bcm/emmc.c
+--- a/bcm/emmc.c	Fri Oct  4 17:34:02 2019
++++ b/bcm/emmc.c	Mon Jan 11 10:40:57 2021
+@@ -33,6 +33,7 @@
+ 
+ 	GoIdle		= 0,		/* mmc/sdio go idle state */
+ 	MMCSelect	= 7,		/* mmc/sd card select command */
++	Sendextcsd  = 8,		/* mmc ext_csd, sd send_if_cond */
+ 	Setbuswidth	= 6,		/* mmc/sd set bus width command */
+ 
+ 	Switchfunc	= 6,		/* mmc/sd switch function command */
+@@ -141,6 +142,7 @@
+ 
+ static int cmdinfo[64] = {
+ [0]  Ixchken,
++[1]  Resp48,
+ [2]  Resp136,
+ [3]  Resp48 | Ixchken | Crcchken,
+ [5]  Resp48,
+@@ -304,6 +306,11 @@
+ 	 */
+ 	if(cmd == Switchfunc && !emmc.appcmd)
+ 		c |= Isdata|Card2host;
++	/*
++	 * CMD8 can be SD_SEND_IF_COND or SEND_EXT_CSD depending on arg
++	 */
++	if(cmd == Sendextcsd && arg == 0)
++		c |= Isdata|Card2host;
+ 	if(cmd == IORWextended){
+ 		if(arg & (1<<31))
+ 			c |= Host2card;
+@@ -319,8 +326,7 @@
+ 		WR(Control0, r[Control0] & ~(Dwidth4|Hispeed));
+ 		emmcclk(Initfreq);
+ 	}
+-	if((r[Status] & Datinhibit) &&
+-	   ((c & Isdata) || (c & Respmask) == Resp48busy)){
++	if(r[Status] & Cmdinhibit){
+ 		print("emmccmd: need to reset Cmdinhibit intr %ux stat %ux\n",
+ 			r[Interrupt], r[Status]);
+ 		WR(Control1, r[Control1] | Srstcmd);
+diff -ur a/port/sdmmc.c b/port/sdmmc.c
+--- a/port/sdmmc.c	Fri Oct  4 17:34:11 2019
++++ b/port/sdmmc.c	Sun Jan 10 18:53:32 2021
+@@ -23,6 +23,8 @@
+ enum {
+ 	Inittimeout	= 15,
+ 	Multiblock	= 1,
++	MMC_TYPE_MMC = 0,
++	MMC_TYPE_SD = 1,
+ 
+ 	/* Commands */
+ 	GO_IDLE_STATE	= 0,
+@@ -31,6 +33,7 @@
+ 	SWITCH_FUNC	= 6,
+ 	SELECT_CARD	= 7,
+ 	SD_SEND_IF_COND	= 8,
++	SEND_EXT_CSD = 8,
+ 	SEND_CSD	= 9,
+ 	STOP_TRANSMISSION= 12,
+ 	SEND_STATUS	= 13,
+@@ -42,6 +45,7 @@
+ 	APP_CMD		= 55,	/* prefix for following app-specific commands */
+ 	SET_BUS_WIDTH	= 6,
+ 	SD_SEND_OP_COND	= 41,
++	MMC_SEND_OP_COND = 1,
+ 
+ 	/* Command arguments */
+ 	/* SD_SEND_IF_COND */
+@@ -79,8 +83,12 @@
+ 	u32int	ocr;
+ 	u32int	cid[4];
+ 	u32int	csd[4];
++	/* SD or MMC */
++	uchar	type;
+ };
+ 
++SDio *sdcardlink;
++
+ extern SDifc sdmmcifc;
+ extern SDio sdio;
+ 
+@@ -102,9 +110,14 @@
+ }
+ 
+ static void
+-identify(SDunit *unit, u32int *csd)
++identify(SDunit *unit)
+ {
+ 	uint csize, mult;
++	Ctlr *ctl = unit->dev->ctlr;
++	u32int *csd = ctl->csd;
++	SDio *io = ctl->io;
++	uchar ext_csd[512];
++	u32int r[4];
+ 
+ 	unit->secsize = 1 << CSD(83, 80);
+ 	switch(CSD(127, 126)){
+@@ -117,11 +130,28 @@
+ 		csize = CSD(69, 48);
+ 		unit->sectors = (csize+1) * 0x80000LL / unit->secsize;
+ 		break;
++	case 3:
++		if(CSD(125, 122) < 4) { /* no EXT_CSD */
++			print("sdmmc: no ext_csd\n");
++			break;
++		}
++		if(waserror()){
++			print("sdmmc: send_ext_csd error\n");
++			nexterror();
++		}
++		io->iosetup(0, ext_csd, 512, 1);
++		io->cmd(SEND_EXT_CSD, 0, r);
++		io->io(0, ext_csd, 512);
++		unit->sectors = ext_csd[212] | (ext_csd[213]<<8) |
++					(ext_csd[214]<<16) | (ext_csd[215]<<24);
++		poperror();
++		break;
+ 	}
+ 	if(unit->secsize == 1024){
+ 		unit->sectors <<= 1;
+ 		unit->secsize = 512;
+ 	}
++	if(0)print("CSD version: %d, sectors: %llud, secsize: %lud\n", CSD(127, 126), unit->sectors, unit->secsize);
+ }
+ 
+ static SDev*
+@@ -130,7 +160,9 @@
+ 	SDev *sdev;
+ 	Ctlr *ctl;
+ 
+-	if(sdio.init() < 0)
++	if(sdcardlink == nil)
++		sdcardlink = &sdio;
++	if(sdcardlink->init() < 0)
+ 		return nil;
+ 	sdev = malloc(sizeof(SDev));
+ 	if(sdev == nil)
+@@ -145,7 +177,7 @@
+ 	sdev->nunit = 1;
+ 	sdev->ctlr = ctl;
+ 	ctl->dev = sdev;
+-	ctl->io = &sdio;
++	ctl->io = sdcardlink;
+ 	return sdev;
+ }
+ 
+@@ -225,12 +257,29 @@
+ 			hcs = Hcs;
+ 		poperror();
+ 	}
+-	for(i = 0; i < Inittimeout; i++){
+-		delay(100);
+-		io->cmd(APP_CMD, 0, r);
+-		io->cmd(SD_SEND_OP_COND, hcs|V3_3, r);
+-		if(r[0] & Powerup)
+-			break;
++	if(!waserror()){
++		for(i = 0; i < Inittimeout; i++){
++			delay(100);
++			io->cmd(APP_CMD, 0, r);
++			io->cmd(SD_SEND_OP_COND, hcs|V3_3, r);
++			if(r[0] & Powerup){
++				ctl->type = MMC_TYPE_SD;
++				break;
++			}
++		}
++		poperror();
++	}else{
++		io->cmd(GO_IDLE_STATE, 0, r);
++		ctl->ocr = (1 << 30);
++		for(i = 0; i < Inittimeout; i++){
++			delay(100);
++			io->cmd(MMC_SEND_OP_COND, ctl->ocr, r);
++			if(r[0] & Powerup){
++				ctl->type = MMC_TYPE_MMC;
++				break;
++			}
++			ctl->ocr = r[0] | (1 << 30);
++		}
+ 	}
+ 	if(i == Inittimeout){
+ 		print("sdmmc: card won't power up\n");
+@@ -240,19 +289,26 @@
+ 	ctl->ocr = r[0];
+ 	io->cmd(ALL_SEND_CID, 0, r);
+ 	memmove(ctl->cid, r, sizeof ctl->cid);
+-	io->cmd(SEND_RELATIVE_ADDR, 0, r);
+-	ctl->rca = r[0]>>16;
++	if(ctl->type == MMC_TYPE_SD){
++		io->cmd(SEND_RELATIVE_ADDR, 0, r);
++		ctl->rca = r[0]>>16;
++	}else{
++		ctl->rca = 1;
++		io->cmd(SEND_RELATIVE_ADDR, ctl->rca<<Rcashift, r);
++	}
+ 	io->cmd(SEND_CSD, ctl->rca<<Rcashift, r);
+ 	memmove(ctl->csd, r, sizeof ctl->csd);
+-	identify(unit, ctl->csd);
+ 	io->cmd(SELECT_CARD, ctl->rca<<Rcashift, r);
++	identify(unit);
+ 	io->cmd(SET_BLOCKLEN, unit->secsize, r);
+-	io->cmd(APP_CMD, ctl->rca<<Rcashift, r);
+-	io->cmd(SET_BUS_WIDTH, Width4, r);
+-	if(io->highspeed){
+-		if(!waserror()){
+-			mmcswitchfunc(io, Hispeed|Setfunc);
+-			poperror();
++	if(ctl->type == MMC_TYPE_SD){
++		io->cmd(APP_CMD, ctl->rca<<Rcashift, r);
++		io->cmd(SET_BUS_WIDTH, Width4, r);
++		if(io->highspeed){
++			if(!waserror()){
++				mmcswitchfunc(io, Hispeed|Setfunc);
++				poperror();
++			}
+ 		}
+ 	}
+ 	poperror();
