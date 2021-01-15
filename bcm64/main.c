@@ -186,7 +186,7 @@ main(uintptr arg0)
 
 	trapinit();
 	fpuinit();
-	vgpinit();
+//	vgpinit();
 	clockinit();
 	cpuidprint();
 	timersinit();

@@ -108,7 +108,7 @@ main(void)
 	timersinit();
 	cpuidprint();
 	archreset();
-	vgpinit();
+//	vgpinit();
 
 	procinit0();
 	initseg();

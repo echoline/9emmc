@@ -225,7 +225,7 @@ okay(int on)
 			gpiosel(okled, Output);
 	}
 	if(okled == 'v')
-		vgpset(0, on);
+		egpset(1, on);
 	else if(okled != 0)
 		gpioout(okled, on^polarity);
 }

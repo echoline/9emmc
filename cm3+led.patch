@@ -1,0 +1,33 @@
+--- /mnt/git/object/538b87f99acbd8d3e238e30a7bef78a0d57403b2/tree/bcm/devarch.c
++++ bcm/devarch.c
+@@ -225,7 +225,7 @@
+ 			gpiosel(okled, Output);
+ 	}
+ 	if(okled == 'v')
+-		vgpset(0, on);
++		egpset(1, on);
+ 	else if(okled != 0)
+ 		gpioout(okled, on^polarity);
+ }
+--- /mnt/git/object/538b87f99acbd8d3e238e30a7bef78a0d57403b2/tree/bcm/main.c
++++ bcm/main.c
+@@ -108,7 +108,7 @@
+ 	timersinit();
+ 	cpuidprint();
+ 	archreset();
+-	vgpinit();
++//	vgpinit();
+ 
+ 	procinit0();
+ 	initseg();
+--- /mnt/git/object/538b87f99acbd8d3e238e30a7bef78a0d57403b2/tree/bcm64/main.c
++++ bcm64/main.c
+@@ -186,7 +186,7 @@
+ 
+ 	trapinit();
+ 	fpuinit();
+-	vgpinit();
++//	vgpinit();
+ 	clockinit();
+ 	cpuidprint();
+ 	timersinit();
