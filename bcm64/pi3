@@ -22,12 +22,14 @@ dev
 	sd
 	usb
 	dtracy
+	audio
 
 link
 	loopbackmedium
 	ethermedium
 	archbcm3
 	usbdwc
+	audiopwm
 
 ip
 	tcp
