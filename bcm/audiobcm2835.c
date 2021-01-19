@@ -254,7 +254,7 @@ reset(Audio *adev, Ctlr *ctlr)
 
 	*(clkregs+ClkCtl) = Password; /* reset */
 
-	*(clkregs+ClkDiv) = Password | 0xC000;
+	*(clkregs+ClkDiv) = Password | 0x2000;
 	*(clkregs+ClkCtl) = Password | ClkEnable | (ClkSrcOsc + ClkPLLCPer);
 
 	*(pwmregs+PwmRng1) = 0x1625; /* 44100 Hz? */
