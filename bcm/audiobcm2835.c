@@ -55,7 +55,6 @@ struct Ctlr
 	float volume[2];
 	int leftpin;
 	int rightpin;
-	uchar setup;
 
 	Buffer *buffer;
 	Rendez vous;
@@ -114,13 +113,6 @@ audiowrite(Audio *adev, void *vp, long n, vlong)
 		return 0;
 
 	ctlr = adev->ctlr;
-
-	if (ctlr->setup == 0) {
-		ctlr->volume[0] = 0.75;
-		ctlr->volume[1] = 0.75;
-
-		ctlr->setup = 1;
-	}
 
 	p = vp;
 	e = p + n;
