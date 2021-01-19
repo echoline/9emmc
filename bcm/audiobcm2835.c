@@ -84,11 +84,8 @@ bcm2835proc(void *arg)
 	Ctlr *ctlr = arg;
 	Buffer *buffer;
 
-	tsleep(&up->sleep, return0, nil, 5000);
-
 	for(;;) {
-		while (gotbuf(ctlr) == 0)
-			tsleep(&ctlr->ready, gotbuf, ctlr, 1000);
+		sleep(&ctlr->ready, gotbuf, ctlr);
 
 		buffer = ctlr->buffer;
 		dmastart(DmaChanPwm, DmaDevPwm, DmaM2D, buffer->buf, pwmregs + PwmFifo, buffer->nbuf);
@@ -118,10 +115,9 @@ audiowrite(Audio *adev, void *vp, long n, vlong)
 
 	ctlr = adev->ctlr;
 
-	/* setup which freezes on boot much be done here */
 	if (ctlr->setup == 0) {
-		ctlr->volume[0] = 0.5;
-		ctlr->volume[1] = 0.5;
+		ctlr->volume[0] = 0.75;
+		ctlr->volume[1] = 0.75;
 
 		ctlr->setup = 1;
 	}
@@ -137,10 +133,9 @@ audiowrite(Audio *adev, void *vp, long n, vlong)
 	while (p < e) {
 		for (channel = 0; channel < 2; channel++) {
 			in = *((s16int*)p);
-			in *= ctlr->volume[channel];
+			in = in * ctlr->volume[channel] * 0.25;
 			out = in + 0x8000;
-			out >>= 4;
-			buffer->buf[i++] = out;
+			buffer->buf[i++] = out >> 4;
 			p += 2;
 		}
 	}
@@ -257,11 +252,13 @@ reset(Audio *adev, Ctlr *ctlr)
 	gpiosel(ctlr->leftpin, Alt0);
 	gpiosel(ctlr->rightpin, Alt0);
 
-	*(clkregs+ClkDiv) = Password | 0x2000;
+	*(clkregs+ClkCtl) = Password; /* reset */
+
+	*(clkregs+ClkDiv) = Password | 0xC000;
 	*(clkregs+ClkCtl) = Password | ClkEnable | (ClkSrcOsc + ClkPLLCPer);
 
-	*(pwmregs+PwmRng1) = 0x1624; /* 44100 Hz? */
-	*(pwmregs+PwmRng2) = 0x1624;
+	*(pwmregs+PwmRng1) = 0x1625; /* 44100 Hz? */
+	*(pwmregs+PwmRng2) = 0x1625;
 	*(pwmregs+PwmCtl) = PwEn1 | UseF1 | PwEn2 | UseF2 | ClrFifo;
 
 	*(pwmregs+PwmDmaC) = DmaEnable;
