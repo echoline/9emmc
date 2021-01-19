@@ -29,7 +29,7 @@ link
 	ethermedium
 	archbcm3
 	usbdwc
-	audiopwm
+	audiobcm2835
 
 ip
 	tcp

@@ -36,11 +36,13 @@ enum {
 	DmaChanSdhost	= 5,
 	DmaChanSpiTx= 2,
 	DmaChanSpiRx= 0,
+	DmaChanPwm = 0, // ???
 
 	DmaDevSpiTx	= 6,
 	DmaDevSpiRx	= 7,
 	DmaDevEmmc	= 11,
 	DmaDevSdhost	= 13,
+	DmaDevPwm = 5,
 
 	PowerSd		= 0,
 	PowerUart0,
