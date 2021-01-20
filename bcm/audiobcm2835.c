@@ -118,8 +118,17 @@ audiowrite(Audio *adev, void *vp, long n, vlong)
 	e = p + n;
 
 	buffer = mallocz(sizeof(Buffer), 1);
+	if (buffer == nil) {
+		print(Enomem);
+		return 0;
+	}
 	buffer->nbuf = n * 2;
 	buffer->buf = mallocz(buffer->nbuf, 1);
+	if (buffer->buf == nil) {
+		print(Enomem);
+		free(buffer);
+		return 0;
+	}
 
 	i = 0;
 	while (p < e) {
@@ -198,12 +207,9 @@ audiovolwrite(Audio *adev, void *a, long n, vlong)
 static long
 buffered(Buffer *buffer)
 {
-	ulong n = 0;
+	ulong n;
 
-	if (buffer == nil)
-		return 0;
-
-	for (; buffer != nil; buffer = buffer->next)
+	for (n = 0; buffer != nil; buffer = buffer->next)
 		n += buffer->nbuf;
 
 	return n;
@@ -280,7 +286,7 @@ audioprobe(Audio *adev)
 
 	ctlr = mallocz(sizeof(Ctlr), 1);
 	if (ctlr == nil) {
-		print("audiobcm2835: can't allocate memory\n");
+		print(Enomem);
 		return -1;
 	}
 
