@@ -20,6 +20,7 @@ enum {
 		ClkEnable = 0x10,
 		ClkSrcOsc = 0x01,	
 		ClkPLLCPer = 0x05,
+		ClkPLLDPer = 0x06,
 
 	PwmCtl = 0,
 		PwEn1 = 0x0001,
@@ -87,7 +88,7 @@ bcm2835proc(void *arg)
 		sleep(&ctlr->ready, gotbuf, ctlr);
 
 		buffer = ctlr->buffer;
-		dmastart(DmaChanPwm, DmaDevPwm, DmaM2D, buffer->buf, pwmregs + PwmFifo, buffer->nbuf);
+		dmastart(DmaChanPwm, DmaDevPwm, DmaM2D, buffer->buf, &pwmregs[PwmFifo], buffer->nbuf);
 		dmawait(DmaChanPwm);
 
 		free(buffer->buf);
@@ -251,16 +252,18 @@ reset(Audio *adev, Ctlr *ctlr)
 	gpiosel(ctlr->leftpin, Alt0);
 	gpiosel(ctlr->rightpin, Alt0);
 
-	*(clkregs+ClkCtl) = Password; /* reset */
+	clkregs[ClkCtl] = Password | (1 << 5); /* reset */
 
-	*(clkregs+ClkDiv) = Password | 0x2000;
-	*(clkregs+ClkCtl) = Password | ClkEnable | (ClkSrcOsc + ClkPLLCPer);
+	clkregs[ClkDiv] = Password | 0x2000;
+	clkregs[ClkCtl] = Password | ClkEnable | ClkPLLDPer;
 
-	*(pwmregs+PwmRng1) = 0x1625; /* 44100 Hz? */
-	*(pwmregs+PwmRng2) = 0x1625;
-	*(pwmregs+PwmCtl) = PwEn1 | UseF1 | PwEn2 | UseF2 | ClrFifo;
+	pwmregs[PwmCtl] = 0; /* disable pwm */
 
-	*(pwmregs+PwmDmaC) = DmaEnable;
+	pwmregs[PwmRng1] = 0x1625; /* 44100 Hz? */
+	pwmregs[PwmRng2] = 0x1625;
+	pwmregs[PwmCtl] = PwEn1 | UseF1 | PwEn2 | UseF2 | ClrFifo;
+
+	pwmregs[PwmDmaC] = DmaEnable;
 	kproc("audiobcm2835", bcm2835proc, ctlr);
 
 	print("#A%d: %s ready\n", adev->ctlrno, adev->name);
