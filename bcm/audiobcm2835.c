@@ -203,7 +203,8 @@ buffered(Buffer *buffer)
 	if (buffer == nil)
 		return 0;
 
-	for (n += buffer->nbuf; buffer != nil; buffer = buffer->next);
+	for (; buffer != nil; buffer = buffer->next)
+		n += buffer->nbuf;
 
 	return n;
 }
