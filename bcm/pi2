@@ -21,12 +21,14 @@ dev
 	gpio	gpio
 	sd
 	usb
+	audio
 
 link
 	loopbackmedium
 	ethermedium
 	archbcm2
 	usbdwc
+	audiobcm2835
 
 ip
 	tcp

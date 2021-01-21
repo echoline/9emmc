@@ -53,7 +53,7 @@ struct Buffer
 
 struct Ctlr
 {
-	float volume[2];
+	int volume[2];
 	int leftpin;
 	int rightpin;
 
@@ -135,7 +135,7 @@ audiowrite(Audio *adev, void *vp, long n, vlong)
 	while (p < e) {
 		for (channel = 0; channel < 2; channel++) {
 			in = *((s16int*)p);
-			in = in * ctlr->volume[channel] * 0.25;
+			in = in * ctlr->volume[channel] / 400;
 			out = in + 0x8000;
 			buffer->buf[i++] = out >> 4;
 			p += 2;
@@ -174,8 +174,8 @@ getvol(Audio *adev, int, int a[2])
 
 	ctlr = adev->ctlr;
 
-	a[0] = ctlr->volume[0] * 100.0;
-	a[1] = ctlr->volume[1] * 100.0;
+	a[0] = ctlr->volume[0];
+	a[1] = ctlr->volume[1];
 
 	return 0;
 }
@@ -193,8 +193,8 @@ setvol(Audio *adev, int, int a[2])
 
 	ctlr = adev->ctlr;
 
-	ctlr->volume[0] = a[0] / 100.0;
-	ctlr->volume[1] = a[1] / 100.0;
+	ctlr->volume[0] = a[0];
+	ctlr->volume[1] = a[1];
 
 	return 0;
 }
