@@ -64,6 +64,11 @@ struct Ctlr
 	Audio *adev;
 };
 
+static Volume voltab[] = {
+	[0] "master", 0, 100, Stereo, 0,
+	0,
+};
+
 static int
 ratebuf(void *arg)
 {
@@ -156,16 +161,6 @@ audiowrite(Audio *adev, void *vp, long n, vlong)
 
 	return n;
 }
-
-static void
-audioclose(Audio *, int)
-{
-}
-
-static Volume voltab[] = {
-	[0] "master", 0, 100, Stereo, 0,
-	0,
-};
 
 static int
 getvol(Audio *adev, int, int a[2])
@@ -270,7 +265,6 @@ reset(Audio *adev, Ctlr *ctlr)
 
 	adev->ctlr = ctlr;
 	adev->write = audiowrite;
-	adev->close = audioclose;
 	adev->volread = audiovolread;
 	adev->volwrite = audiovolwrite;
 	adev->status = audiostatus;
