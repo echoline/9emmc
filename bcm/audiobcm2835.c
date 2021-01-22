@@ -115,7 +115,7 @@ audiowrite(Audio *adev, void *vp, long n, vlong)
 	Buffer *buffer;
 	Buffer *buffers;
 
-	if ((n % 4) != 0)
+	if (n == 0 || (n % 4) != 0)
 		return 0;
 
 	ctlr = adev->ctlr;
